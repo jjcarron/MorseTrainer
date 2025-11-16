@@ -203,10 +203,18 @@ def get_letters_apprises(last_known=None):
 def main():
     parser = argparse.ArgumentParser(description="Entraînement Morse méthode Koch")
     parser.add_argument(
-        "--last", type=str, help="Dernière lettre apprise (ex: K, M, R...)"
+        "--last",
+        type=str,
+        help="Dernière lettre apprise (ex: K, M, R...)",
     )
     parser.add_argument(
         "--tests", type=int, default=3, help="Nombre de séquences de test"
+    )
+    parser.add_argument(
+        "--length",
+        type=int,
+        default=10,
+        help="Longueur de la séquence d'entraînement/test",
     )
     args = parser.parse_args()
 
@@ -224,7 +232,7 @@ def main():
     print("Lettres connues pour cette session:", "".join(letters))
 
     # Entraînement
-    if last_known is None:
+    if last_known is None or last_known.upper() == "K":
         for l in letters:  # K et M ensemble
             train_letter(l)
     elif new_letter:
@@ -235,11 +243,12 @@ def main():
         print(f"\n=== Test {test_num}/{args.tests} ===")
 
         # Commentaire vocal avant le test
+        print(f"Annonce: Début du test numéro {test_num}")
         speak(f"Début du test numéro {test_num}")
         time.sleep(0.5)  # petite pause pour éviter de couper le premier bip
 
         while True:
-            seq = test_sequence(letters, length=10)
+            seq = test_sequence(letters, length=args.length)
 
             user_input = (
                 input("Tape la séquence entendue (ex: KMKM...): ").strip().upper()
@@ -258,17 +267,19 @@ def main():
 
             save_session(letters, seq, "".join(user_seq), success_rate)
 
-        if success_rate >= 0.9:
-            print("✅ Bravo, tu as atteint 90%. Tu peux passer à la lettre suivante.")
-            # Sauvegarde de la dernière lettre réussie
-            with open(LAST_FILE, "w", encoding="utf-8") as f:
-                f.write(letters[-1])
-            break
-        else:
-            print("❌ Entraîne-toi encore avant de passer à la suivante.")
-            retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
-            if retry != "O":
+            if success_rate >= 0.9:
+                print(
+                    "✅ Bravo, tu as atteint 90%. Tu peux passer à la lettre suivante."
+                )
+                # Sauvegarde de la dernière lettre réussie
+                with open(LAST_FILE, "w", encoding="utf-8") as f:
+                    f.write(letters[-1])
                 break
+            else:
+                print("❌ Entraîne-toi encore avant de passer à la suivante.")
+                retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
+                if retry != "O":
+                    break
 
 
 if __name__ == "__main__":
