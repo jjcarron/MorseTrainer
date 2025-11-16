@@ -53,3 +53,53 @@ Séquence émise: NNANAA
 Réponse donnée: NNANAA
 Taux de réussite: 1.00
 ----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKK
+Taux de réussite: 0.83
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKK
+Taux de réussite: 0.83
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
+Lettres connues: K
+Séquence émise: KKKKKK
+Réponse donnée: KKKKKK
+Taux de réussite: 1.00
+----------------------------------------
