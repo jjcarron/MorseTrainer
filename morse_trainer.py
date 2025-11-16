@@ -1,88 +1,45 @@
+import os
 import time
 import random
 import pyttsx3
 import winsound
+import argparse
 import sys
 
 # Configuration audio
-FREQ = 600   # fréquence du ton CW en Hz
-DOT = 100    # durée du point en ms
+FREQ = 600
+DOT = 100
 DASH = DOT * 3
-SPACE = DOT  # espace entre éléments
+SPACE = DOT
 
-# Dictionnaire Morse
+# Dictionnaire Morse (alphabet, chiffres, ponctuation)
 MORSE = {
-    # Lettres
-    "A": ".-",    "B": "-...",  "C": "-.-.",  "D": "-..",   "E": ".",
-    "F": "..-.",  "G": "--.",   "H": "....",  "I": "..",    "J": ".---",
-    "K": "-.-",   "L": ".-..",  "M": "--",    "N": "-.",    "O": "---",
-    "P": ".--.",  "Q": "--.-",  "R": ".-.",   "S": "...",   "T": "-",
-    "U": "..-",   "V": "...-",  "W": ".--",   "X": "-..-",  "Y": "-.--",
+    "A": ".-", "B": "-...", "C": "-.-.", "D": "-..", "E": ".",
+    "F": "..-.", "G": "--.", "H": "....", "I": "..", "J": ".---",
+    "K": "-.-", "L": ".-..", "M": "--", "N": "-.", "O": "---",
+    "P": ".--.", "Q": "--.-", "R": ".-.", "S": "...", "T": "-",
+    "U": "..-", "V": "...-", "W": ".--", "X": "-..-", "Y": "-.--",
     "Z": "--..",
-
-    # Chiffres
     "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-",
     "5": ".....", "6": "-....", "7": "--...", "8": "---..", "9": "----.",
-
-    # Ponctuation courante
-    ".": ".-.-.-",  ",": "--..--",  "?": "..--..",  "'": ".----.",
-    "!": "-.-.--",  "/": "-..-.",   "(": "-.--.",   ")": "-.--.-",
-    "&": ".-...",   ":": "---...",  ";": "-.-.-.",  "=": "-...-",
-    "+": ".-.-.",   "-": "-....-",  "_": "..--.-",  "\"": ".-..-.",
+    ".": ".-.-.-", ",": "--..--", "?": "..--..", "'": ".----.",
+    "!": "-.-.--", "/": "-..-.", "(": "-.--.", ")": "-.--.-",
+    "&": ".-...", ":": "---...", ";": "-.-.-.", "=": "-...-",
+    "+": ".-.-.", "-": "-....-", "_": "..--.-", "\"": ".-..-.",
     "$": "...-..-", "@": ".--.-."
 }
-# Séquence d’apprentissage Koch (ordre recommandé)
-# 1: K, M
-# 2: R
-# 3: S
-# 4: U
-# 5: A
-# 6: P
-# 7: T
-# 8: L
-# 9: O
-# 10: N
-# 11: E
-# 12: I
-# 13: D
-# 14: C
-# 15: H
-# 16: F
-# 17: Y
-# 18: V
-# 19: G
-# 20: 5
-# 21: Q
-# 22: 9
-# 23: Z
-# 24: 3
-# 25: J
-# 26: 4
-# 27: B
-# 28: 8
-# 29: 7
-# 30: .
-# 31: ,
-# 32: ?
-# 33: /
-# 34: 0
-# 35: 6
-# 36: 1
-# 37: 2
-# 38: :
-# 39: ;
-# 40: =
-# 41: +
-# 42: -
-# 43: _
-# 44: "
-# 45: @
 
-# Synthèse vocale doit être créé pour chaque appel pour éviter les conflits
-#engine = pyttsx3.init()
+# Séquence Koch (au début K et M sont apprises en premier ensemble)
+KOCH_SEQUENCE = [
+    "K","M","R","S","U","A","P","T","L","O","N","E","I","D","C","H","F","Y","V","G",
+    "5","Q","9","Z","3","J","4","B","8","7",".",",","?","/","0","6","1","2",":",";",
+    "=","+","-","_","\"","@"
+]
+
+LAST_FILE = "last_known_letter.txt"
 
 def speak(text):
-    engine = pyttsx3.init()   # réinitialisation à chaque appel
+    engine = pyttsx3.init()
     engine.say(text)
     engine.runAndWait()
     engine.stop()
@@ -94,16 +51,16 @@ def play_morse(symbols):
         elif s == "-":
             winsound.Beep(FREQ, DASH)
         time.sleep(SPACE/1000.0)
-    time.sleep(0.5)  # pause entre lettres
+    time.sleep(0.5)
 
-def train_letter(letter, repeat=3):
+def train_letter(letter, repeat=5):
     for _ in range(repeat):
         speak(letter)
-        time.sleep(0.3)  # pause pour séparer voix et son
+        time.sleep(0.3)
         play_morse(MORSE[letter])
         time.sleep(0.5)
 
-def test_sequence(letters, length=6):
+def test_sequence(letters, length=10):
     seq = [random.choice(letters) for _ in range(length)]
     print("\n--- Séquence test ---")
     for l in seq:
@@ -113,30 +70,34 @@ def test_sequence(letters, length=6):
 
 def save_session(letters, seq, user_input, success_rate):
     with open("sessions_morse.txt", "a", encoding="utf-8") as f:
-        f.write("Lettres connues: " + " ".join(letters) + "\n")
+        f.write("Lettres connues: " + "".join(letters) + "\n")
         f.write("Séquence émise: " + "".join(seq) + "\n")
         f.write("Réponse donnée: " + user_input + "\n")
         f.write(f"Taux de réussite: {success_rate:.2f}\n")
         f.write("-"*40 + "\n")
 
-def get_letters_apprises(last_known="A"):
-    # Séquence Koch
-    koch_sequence = [
-        "K","M","R","S","U","A","P","T","L","O","N","E","I","D","C","H","F","Y","V","G",
-        "5","Q","9","Z","3","J","4","B","8","7",".",",","?","/","0","6","1","2",":",";",
-        "=","+","-","_","\"","@"
-    ]
-    if last_known not in koch_sequence:
-        print(f"Signe {last_known} non reconnu, utilisation de M par défaut.")
-        last_known = "M"
-    idx = koch_sequence.index(last_known)
+def get_letters_apprises(last_known=None):
+    if last_known is None:
+        # Cas 1 : rien donné → commencer avec K et M
+        learned = ["K","M"]
+        next_letter = None  # pas de nouvelle lettre unique, on entraîne les deux
+        print("Début de l’apprentissage : lettres K et M")
+        return learned, next_letter
 
-    # Lettres déjà apprises
-    learned = koch_sequence[:idx+1]
+    if last_known not in KOCH_SEQUENCE:
+        print(f"Signe {last_known} non reconnu, utilisation de K et M par défaut.")
+        return ["K","M"], None
 
-    # Ajout de la suivante pour entraînement
-    if idx+1 < len(koch_sequence):
-        next_letter = koch_sequence[idx+1]
+    idx = KOCH_SEQUENCE.index(last_known)
+    learned = KOCH_SEQUENCE[:idx+1]
+
+    # Cas 2 : si K est donné → ajouter M
+    if last_known == "K":
+        learned.append("M")
+        next_letter = "M"
+        print("Nouvelle lettre à apprendre : M")
+    elif idx+1 < len(KOCH_SEQUENCE):
+        next_letter = KOCH_SEQUENCE[idx+1]
         learned.append(next_letter)
         print(f"Nouvelle lettre à apprendre : {next_letter}")
     else:
@@ -145,27 +106,35 @@ def get_letters_apprises(last_known="A"):
 
     return learned, next_letter
 
-def main(nb_tests=1):
-    try:
-        # Détermination du signe d’avancement
-        if len(sys.argv) > 1:
-            last_known = sys.argv[1].upper()
-        else:
-            last_known = input("Dernier signe appris (défaut=M): ").strip().upper() or "M"
+def main():
+    parser = argparse.ArgumentParser(description="Entraînement Morse méthode Koch")
+    parser.add_argument("--last", type=str, help="Dernière lettre apprise (ex: K, M, R...)")
+    parser.add_argument("--tests", type=int, default=1, help="Nombre de séquences de test")
+    args = parser.parse_args()
 
-        letters, new_letter = get_letters_apprises(last_known)
-        print("Lettres connues pour cette session:", "".join(letters))
+    letters, new_letter = get_letters_apprises(args.last)
+    print("Lettres connues pour cette session:", "".join(letters))
 
-        # Entraînement de la nouvelle lettre uniquement
-        if new_letter:
-            train_letter(new_letter)
+    # Entraînement
+    if args.last is None:
+        # Cas 1 : début → entraîner K et M ensemble
+        for l in letters:
+            train_letter(l)
+    elif new_letter:
+        # Cas 2 et 3 : entraîner uniquement la nouvelle lettre
+        train_letter(new_letter)
 
-        # Test avec 10 caractères
-        for test_num in range(1, nb_tests+1):
-            print(f"\n=== Test {test_num}/{nb_tests} ===")
+    for test_num in range(1, args.tests+1):
+        print(f"\n=== Test {test_num}/{args.tests} ===")
+
+        # Commentaire vocal avant le test
+        speak(f"Début du test numéro {test_num}")
+        time.sleep(0.5)  # petite pause pour éviter de couper le premier bip
+
+        while True:
             seq = test_sequence(letters, length=10)
 
-            user_input = input("Tape la séquence entendue (ex: ANANAKM...): ").strip().upper()
+            user_input = input("Tape la séquence entendue (ex: KMKM...): ").strip().upper()
             user_seq = list(user_input)
 
             correct = sum(1 for i, l in enumerate(seq) if i < len(user_seq) and user_seq[i] == l)
@@ -178,15 +147,15 @@ def main(nb_tests=1):
 
             save_session(letters, seq, "".join(user_seq), success_rate)
 
-            # Vérification du seuil 90 %
             if success_rate >= 0.9:
                 print("✅ Bravo, tu as atteint 90%. Tu peux passer à la lettre suivante.")
+                break  # on sort de la boucle et passe au test suivant
             else:
                 print("❌ Entraîne-toi encore avant de passer à la suivante.")
-
-    except KeyboardInterrupt:
-        print("\nArrêt demandé (Ctrl+Q). Fin du programme.")
-        sys.exit(0)
+                retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
+                if retry != "O":
+                    break  # tu choisis de ne pas répéter, on passe au test suivant
 
 if __name__ == "__main__":
-    main(nb_tests=3)
+    main()
+
