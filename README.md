@@ -1,11 +1,23 @@
 # MorseTrainer
-Outils d'apprentissage du morse télégraphique
+Outils d'apprentissage et de décodage du Morse (méthode Koch).
 
-## Capture audio (Windows)
-- Lecture de fichiers : `py morse_decoder.py --file tonfichier.mp3` (pydub+ffmpeg requis).
-- Capture sortie PC (sans écouter) via VB-CABLE :
-  1. Installer VB-CABLE, choisir `CABLE Input` comme sortie audio par défaut.
-  2. Lancer le décodeur sur `CABLE Output` (entrée) :  
-     `py morse_decoder.py --device "CABLE Output (VB-Audio Virtual Cable)" --rate 96000 --blocksize 2048 --threshold 0.02`
-  3. Pour réentendre en même temps, ajouter Voicemeeter ou activer l'écoute du câble vers vos HP.
+## Structure
+- `morsetrainer/` : sources (`morse_trainer.py`, `morse_decoder.py`, `capture_test.py`).
+- `tests/` : tests Pytest.
+- `docs/` : documentation.
+- `data/` : non versionné (captures, fichiers audio persos).
+
+## Utilisation
+- Entraînement Koch :  
+  `python -m morsetrainer.morse_trainer --tests 1`
+- Décodage d'un fichier :  
+  `python -m morsetrainer.morse_decoder --file chemin.wav`
+- Décodage live (VB-Cable) :  
+  `python -m morsetrainer.morse_decoder --device "CABLE Output (VB-Audio Virtual Cable)" --rate 96000 --blocksize 2048`
+- Capture brute pour debug :  
+  `python -m morsetrainer.capture_debug --device 31 --rate 96000 --duration 5`
+
+## Tests
+```
+pytest
 ```
