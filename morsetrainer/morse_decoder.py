@@ -176,6 +176,7 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         self._debug_events = 0
         self.max_debug_events = 400
         self.space_char = space_char
+        self.gap_flushed = False
 
     def set_threshold(self, noise_levels: List[float], user_threshold: Optional[float]):
         """Calcule ou applique le seuil de détection."""
@@ -211,6 +212,16 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
 
         if is_on == self.current_state:
             self.state_time += block_duration
+            if not is_on and not self.gap_flushed:
+                duration_ms = self.state_time * 1000.0
+                units = duration_ms / self.cfg.unit_ms
+                if units >= self.cfg.word_gap_units:
+                    self._flush_symbol()
+                    self.output(self.space_char)
+                    self.gap_flushed = True
+                elif units >= self.cfg.letter_gap_units:
+                    self._flush_symbol()
+                    self.gap_flushed = True
             return
 
         # Transition : traiter la durée de l'état précédent, puis démarrer le nouveau
@@ -218,10 +229,12 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         if self.current_state:
             self._handle_tone(duration_ms)
         else:
-            self._handle_gap(duration_ms)
+            if not self.gap_flushed:
+                self._handle_gap(duration_ms)
 
         self.current_state = is_on
         self.state_time = block_duration
+        self.gap_flushed = False
 
     def finalize(self):
         """Flush pending tone/gap when stream ends."""
@@ -230,7 +243,8 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
             self._handle_tone(self.state_time * 1000.0)
             self.current_state = False
             self.state_time = 0.0
-        self._handle_gap(self.state_time * 1000.0, final=True)
+        if not self.gap_flushed:
+            self._handle_gap(self.state_time * 1000.0, final=True)
 
     def _handle_tone(self, duration_ms: float):
         """Ajoute un point ou un tiret selon la durée du ton."""
