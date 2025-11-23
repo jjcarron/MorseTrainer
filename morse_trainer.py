@@ -2,15 +2,87 @@ import os
 import time
 import random
 import pyttsx3
-import winsound
 import argparse
 import sys
+import shutil
+import subprocess
 
 # Configuration audio
 FREQ = 600
 DOT = 100
 DASH = DOT * 3
 SPACE = DOT
+
+
+try:
+    import winsound  # type: ignore
+except ImportError:
+    winsound = None
+
+
+def _warn_no_audio():
+    # Print the warning only once to avoid noise during training loops.
+    if not hasattr(_warn_no_audio, "shown"):
+        print(
+            "⚠️  Aucun backend audio trouvé (winsound/play/beep/powershell). Les sons sont remplacés par des pauses."
+        )
+        _warn_no_audio.shown = True
+
+
+def is_wsl():
+    return (
+        "WSL_INTEROP" in os.environ
+        or "WSL_DISTRO_NAME" in os.environ
+        or "microsoft" in open("/proc/version", "r", encoding="utf-8").read().lower()
+    )
+
+
+def tts_available():
+    if sys.platform.startswith("win"):
+        return True
+    return bool(shutil.which("espeak") or shutil.which("espeak-ng"))
+
+
+
+def play_tone(freq, duration_ms):
+    """Cross-platform tone playback.
+
+    Order of preference:
+    - winsound (Windows)
+    - SoX `play` command
+    - `beep` command
+    - fallback to a simple sleep so timings stay consistent
+    """
+
+    if winsound:
+        winsound.Beep(freq, duration_ms)
+        return
+
+    # Under WSL, prefer delegating to Windows to avoid missing ALSA/Pulse backends.
+    if is_wsl() and shutil.which("powershell.exe"):
+        subprocess.run(
+            ["powershell.exe", "-c", f"[console]::beep({freq},{duration_ms})"],
+            check=False,
+        )
+        return
+
+    if shutil.which("play"):
+        result = subprocess.run(
+            ["play", "-q", "-n", "synth", f"{duration_ms/1000}", "sin", str(freq)],
+            check=False,
+        )
+        if result.returncode == 0:
+            return
+
+    if shutil.which("beep"):
+        result = subprocess.run(
+            ["beep", "-f", str(freq), "-l", str(duration_ms)], check=False
+        )
+        if result.returncode == 0:
+            return
+
+    _warn_no_audio()
+    time.sleep(duration_ms / 1000.0)
 
 # Dictionnaire Morse (alphabet, chiffres, ponctuation)
 MORSE = {
@@ -122,20 +194,48 @@ KOCH_SEQUENCE = [
 
 LAST_FILE = "last_known_letter.txt"
 
+_speech_engine = None
+_speech_engine_failed = False
+_warned_tts_missing = False
+
 
 def speak(text):
-    engine = pyttsx3.init()
-    engine.say(text)
-    engine.runAndWait()
-    engine.stop()
+    """TTS wrapper that degrades gracefully when no engine is available."""
+    global _speech_engine, _speech_engine_failed
+
+    if _speech_engine_failed:
+        return
+
+    if not tts_available():
+        global _warned_tts_missing
+        if not _warned_tts_missing:
+            print("⚠️  Synthèse vocale désactivée : backend TTS introuvable (espeak/espeak-ng).")
+            _warned_tts_missing = True
+        _speech_engine_failed = True
+        return
+
+    if _speech_engine is None:
+        try:
+            _speech_engine = pyttsx3.init()
+        except Exception as exc:  # TTS not available (e.g., missing espeak)
+            print(f"⚠️  Synthèse vocale indisponible: {exc}")
+            _speech_engine_failed = True
+            return
+
+    try:
+        _speech_engine.say(text)
+        _speech_engine.runAndWait()
+    except Exception as exc:
+        print(f"⚠️  Erreur synthèse vocale: {exc}")
+        _speech_engine_failed = True
 
 
 def play_morse(symbols):
     for s in symbols:
         if s == ".":
-            winsound.Beep(FREQ, DOT)
+            play_tone(FREQ, DOT)
         elif s == "-":
-            winsound.Beep(FREQ, DASH)
+            play_tone(FREQ, DASH)
         time.sleep(SPACE / 1000.0)
     time.sleep(0.5)
 
