@@ -11,7 +11,7 @@ word_gap_units: 12.0        # Seuil (en unités) de fin de mot
 # Paramètres audio / Goertzel
 freq: 600                   # Fréquence cible du bip (Hz)
 rate: 48000                 # Fréquence d'échantillonnage demandée
-blocksize: 1024             # Taille de bloc audio traitée à chaque itération
+blocksize: 512              # Taille de bloc audio traitée à chaque itération (plus petit = latence réduite)
 target_rate: 48000          # Fréquence cible lors de la conversion ffmpeg
 threshold: 0.02             # Seuil RMS manuel; null pour auto
 word_sep: " "               # Caractère séparateur de mots dans la sortie
