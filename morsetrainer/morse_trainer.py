@@ -1,21 +1,32 @@
 """Entraîneur Morse (méthode Koch) avec synthèse vocale et bip audio."""
 
-import os
-import time
-import random
 import argparse
+import os
+import random
 import shutil
 import subprocess
 import sys
+import time
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 import pyttsx3
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 # Configuration audio
 FREQ = 600
 DOT = 100
 DASH = DOT * 3
 SPACE = DOT
-
+DEFAULT_OUTPUT_DIR = "data"
+DEFAULT_CONFIG_PATHS = [
+    os.path.join("config", "morse_trainer.yaml"),
+    "morse_trainer.yaml",
+]
 
 try:
     import winsound  # type: ignore
@@ -201,10 +212,62 @@ KOCH_SEQUENCE = [
 ]
 
 LAST_FILE = "last_known_letter.txt"
+SESSIONS_FILE = "sessions_morse.txt"
 
 _speech_engine = None
 _speech_engine_failed = False
 _warned_tts_missing = False
+
+
+@dataclass
+class TrainerConfig:
+    """Configuration de l'entraîneur (audio, persistance, debug)."""
+
+    output_dir: str = DEFAULT_OUTPUT_DIR
+    freq: int = 600
+    dot_ms: int = 100
+    dash_factor: int = 3
+    space_ms: int = 100
+    tests: int = 3
+    length: int = 10
+    debug: bool = False
+
+
+def load_yaml_config(paths):
+    """Charge le premier fichier YAML existant parmi la liste."""
+    if yaml is None:
+        return {}
+    for path in paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as cfg_file:
+                data = yaml.safe_load(cfg_file) or {}
+                if isinstance(data, dict):
+                    return data
+    return {}
+
+
+def validate_trainer_config(raw: Optional[Dict[str, Any]]) -> TrainerConfig:
+    """Valide et normalise une config YAML vers TrainerConfig."""
+    cfg = dict(raw or {})
+
+    def positive_int(name: str, default: int) -> int:
+        val = cfg.get(name, default)
+        if val is None:
+            return default
+        if not isinstance(val, int) or val <= 0:
+            raise ValueError(f"{name} doit etre un entier positif")
+        return val
+
+    return TrainerConfig(
+        output_dir=cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
+        freq=positive_int("freq", 600),
+        dot_ms=positive_int("dot_ms", 100),
+        dash_factor=positive_int("dash_factor", 3),
+        space_ms=positive_int("space_ms", 100),
+        tests=positive_int("tests", 3),
+        length=positive_int("length", 10),
+        debug=bool(cfg.get("debug", False)),
+    )
 
 
 def speak(text):
@@ -273,7 +336,7 @@ def test_sequence(letters, length=10):
 
 def save_session(letters, seq, user_input, success_rate):
     """Sauvegarde une session de test dans un fichier texte."""
-    with open("sessions_morse.txt", "a", encoding="utf-8") as f:
+    with open(SESSIONS_FILE, "a", encoding="utf-8") as f:
         f.write("Lettres connues: " + "".join(letters) + "\n")
         f.write("Séquence émise: " + "".join(seq) + "\n")
         f.write("Réponse donnée: " + user_input + "\n")
@@ -317,20 +380,38 @@ def main():
     """Point d'entrée CLI pour l'entraînement Morse méthode Koch."""
     parser = argparse.ArgumentParser(description="Entraînement Morse méthode Koch")
     parser.add_argument(
+        "--config", type=str, help="Chemin vers un fichier YAML de configuration"
+    )
+    parser.add_argument(
         "--last",
         type=str,
         help="Dernière lettre apprise (ex: K, M, R...)",
     )
     parser.add_argument(
-        "--tests", type=int, default=3, help="Nombre de séquences de test"
+        "--tests", type=int, help="Nombre de séquences de test"
     )
     parser.add_argument(
         "--length",
         type=int,
-        default=10,
         help="Longueur de la séquence d'entraînement/test",
     )
     args = parser.parse_args()
+
+    raw_cfg = load_yaml_config([args.config] if args.config else DEFAULT_CONFIG_PATHS)
+    cfg = validate_trainer_config(raw_cfg)
+
+    # Appliquer la config et les overrides CLI
+    os.makedirs(cfg.output_dir, exist_ok=True)
+    global FREQ, DOT, DASH, SPACE, LAST_FILE, SESSIONS_FILE
+    FREQ = cfg.freq
+    DOT = cfg.dot_ms
+    DASH = DOT * cfg.dash_factor
+    SPACE = cfg.space_ms
+    LAST_FILE = os.path.join(cfg.output_dir, "last_known_letter.txt")
+    SESSIONS_FILE = os.path.join(cfg.output_dir, "sessions_morse.txt")
+
+    tests_count = args.tests if args.tests is not None else cfg.tests
+    length = args.length if args.length is not None else cfg.length
 
     # Priorité : paramètre > fichier > défaut K,M
     if args.last:
@@ -353,8 +434,8 @@ def main():
         train_letter(new_letter)
 
     # Tests
-    for test_num in range(1, args.tests + 1):
-        print(f"\n=== Test {test_num}/{args.tests} ===")
+    for test_num in range(1, tests_count + 1):
+        print(f"\n=== Test {test_num}/{tests_count} ===")
 
         # Commentaire vocal avant le test
         print(f"Annonce: Début du test numéro {test_num}")
@@ -362,7 +443,7 @@ def main():
         time.sleep(0.5)  # petite pause pour éviter de couper le premier bip
 
         while True:
-            seq = test_sequence(letters, length=args.length)
+            seq = test_sequence(letters, length=length)
 
             user_input = (
                 input("Tape la séquence entendue (ex: KMKM...): ").strip().upper()

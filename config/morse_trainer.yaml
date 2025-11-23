@@ -1,0 +1,13 @@
+# Configuration de l'entraîneur Morse (méthode Koch)
+output_dir: data    # Répertoire pour les fichiers générés (sessions, last_known_letter)
+debug: false        # Mode debug (actuellement non utilisé pour verbosité supplémentaire)
+
+# Audio
+freq: 600           # Fréquence des bips (Hz)
+dot_ms: 100         # Durée d'un point (ms)
+dash_factor: 3      # Multiplicateur pour la durée d'un tiret
+space_ms: 100       # Durée de l'espace inter-éléments (ms)
+
+# Paramètres de session
+tests: 3            # Nombre de séquences de test par lancement
+length: 10          # Longueur d'une séquence de test

@@ -1,14 +1,14 @@
 """Décodage Morse à partir d'un flux audio live ou d'un fichier."""
 
 import argparse
-import sys
-import wave
-import shutil
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
+import wave
 from dataclasses import dataclass
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -16,6 +16,11 @@ try:
     import sounddevice as sd
 except ImportError:
     sd = None  # sounddevice is optional; required for live capture
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 try:
     from pydub import AudioSegment
@@ -80,6 +85,107 @@ MORSE = {
 }
 
 MORSE_REVERSE = {v: k for k, v in MORSE.items()}
+
+def load_yaml_config(paths: List[str]) -> Dict[str, Any]:
+    """Charge le premier fichier YAML existant parmi les chemins listés."""
+    if yaml is None:
+        return {}
+    for path in paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as cfg_file:
+                data = yaml.safe_load(cfg_file) or {}
+                if isinstance(data, dict):
+                    return data
+    return {}
+
+
+def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Valide et nettoie la configuration issue du YAML."""
+    cfg = dict(raw or {})
+    def positive(name: str, default: Union[int, float]) -> Union[int, float]:
+        val = cfg.get(name, default)
+        if val is None:
+            return default
+        if not isinstance(val, (int, float)) or val <= 0:
+            raise ValueError(f"{name} doit etre un nombre positif")
+        return val
+
+    validated = {
+        "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
+        "debug": bool(cfg.get("debug", False)),
+        "unit_ms": positive("unit_ms", 60.0),
+        "dash_units": positive("dash_units", 2.0),
+        "letter_gap_units": positive("letter_gap_units", 9.0),
+        "word_gap_units": positive("word_gap_units", 20.0),
+        "freq": positive("freq", 600.0),
+        "rate": positive("rate", DEFAULT_TARGET_RATE),
+        "blocksize": int(positive("blocksize", 1024)),
+        "threshold": cfg.get("threshold"),
+        "word_sep": cfg.get("word_sep", " "),
+        "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
+        "min_rms_threshold": positive("min_rms_threshold", 0.02),
+        "calibration_seconds": positive("calibration_seconds", 2.0),
+    }
+    thr = validated["threshold"]
+    if thr is not None:
+        if not isinstance(thr, (int, float)) or thr <= 0:
+            raise ValueError("threshold doit etre > 0 ou None")
+        validated["threshold"] = float(thr)
+    return validated
+
+DEFAULT_CONFIG_PATHS = [
+    os.path.join("config", "morse_decoder.yaml"),
+    "morse_decoder.yaml",
+]
+DEFAULT_OUTPUT_DIR = "data"
+DEFAULT_TARGET_RATE = 44100
+
+
+def load_yaml_config(paths: List[str]) -> Dict[str, Any]:
+    """Charge le premier fichier YAML existant parmi la liste."""
+    if yaml is None:
+        return {}
+    for path in paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as cfg_file:
+                data = yaml.safe_load(cfg_file) or {}
+                if isinstance(data, dict):
+                    return data
+    return {}
+
+
+def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Valide et normalise les valeurs de configuration issues du YAML."""
+    cfg = dict(raw or {})
+
+    def positive(name: str, default: Union[int, float]) -> Union[int, float]:
+        val = cfg.get(name, default)
+        if val is None:
+            return default
+        if not isinstance(val, (int, float)) or val <= 0:
+            raise ValueError(f"{name} doit etre un nombre positif")
+        return val
+
+    validated = {
+        "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
+        "debug": bool(cfg.get("debug", False)),
+        "unit_ms": positive("unit_ms", 60.0),
+        "dash_units": positive("dash_units", 2.0),
+        "letter_gap_units": positive("letter_gap_units", 9.0),
+        "word_gap_units": positive("word_gap_units", 20.0),
+        "freq": positive("freq", 600.0),
+        "rate": positive("rate", DEFAULT_TARGET_RATE),
+        "blocksize": int(positive("blocksize", 1024)),
+        "threshold": cfg.get("threshold"),
+        "word_sep": cfg.get("word_sep", " "),
+        "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
+    }
+    thr = validated["threshold"]
+    if thr is not None:
+        if not isinstance(thr, (int, float)) or thr <= 0:
+            raise ValueError("threshold doit etre > 0 ou None")
+        validated["threshold"] = float(thr)
+    return validated
 
 
 @dataclass
@@ -242,14 +348,12 @@ def read_wave_file(path: str, blocksize: int):
             cursor += blocksize
 
 
-def read_audio_file(path: str, blocksize: int):
+def read_audio_file(path: str, blocksize: int, target_rate: int = DEFAULT_TARGET_RATE):
     """Lit un fichier audio (wav ou via pydub) et renvoie des blocs normalisés."""
     ext = os.path.splitext(path)[1].lower()
     if ext == ".wav":
         yield from read_wave_file(path, blocksize)
         return
-
-    target_rate = 44100
 
     if AudioSegment is None:
         # Fallback: tenter une conversion rapide via ffmpeg si disponible.
@@ -336,7 +440,7 @@ def measure_level(block: np.ndarray, sample_rate: int, target_freq: Optional[flo
     return float(magnitude)
 
 
-def capture_stream(args, decoder: MorseDecoder):
+def capture_stream(args, decoder: MorseDecoder, record_path: Optional[str] = None):
     """Capture live audio via sounddevice et envoie les blocs au décodeur."""
     if sd is None:
         print("sounddevice non installe. Installez-le avec: pip install sounddevice")
@@ -445,15 +549,15 @@ def capture_stream(args, decoder: MorseDecoder):
         )
         record_writer = None
         if decoder.debug:
-            record_path = "debug_capture.wav"
+            target_record = record_path or "debug_capture.wav"
             try:
-                record_writer = wave.open(record_path, "wb")
+                record_writer = wave.open(target_record, "wb")
                 record_writer.setnchannels(channels if channels else 1)
                 record_writer.setsampwidth(2)  # int16
                 record_writer.setframerate(sample_rate)
-                print(f"Enregistrement debug vers {record_path}")
+                print(f"Enregistrement debug vers {target_record}")
             except Exception as exc:
-                print(f"⚠️  Impossible d'ouvrir {record_path} pour enregistrement: {exc}")
+                print(f"⚠️  Impossible d'ouvrir {target_record} pour enregistrement: {exc}")
                 record_writer = None
         calibrate_blocks = int(
             (args.calibration or decoder.cfg.calibration_seconds)
@@ -504,7 +608,9 @@ def decode_file(args, decoder: MorseDecoder):
     # First pass: load blocks and estimate threshold automatically if none provided.
     blocks = []
     sample_rates = []
-    for block, sample_rate in read_audio_file(args.file, args.blocksize):
+    for block, sample_rate in read_audio_file(
+        args.file, args.blocksize, target_rate=args.target_rate
+    ):
         blocks.append(block)
         sample_rates.append(sample_rate)
 
@@ -538,49 +644,87 @@ def decode_file(args, decoder: MorseDecoder):
     decoder.finalize()
 
 
+def merge_config_with_args(args: argparse.Namespace) -> Tuple[DecoderConfig, Dict[str, Any]]:
+    """Fusionne valeurs par défaut, YAML et CLI (CLI prioritaire)."""
+    raw_cfg = load_yaml_config([args.config] if args.config else DEFAULT_CONFIG_PATHS)
+    cfg_dict = validate_decoder_config(raw_cfg)
+
+    def pick(name: str, default_key: Optional[str] = None):
+        val = getattr(args, name)
+        if val is not None:
+            return val
+        if default_key:
+            return cfg_dict.get(default_key)
+        return cfg_dict.get(name)
+
+    unit_ms = pick("unit", "unit_ms")
+    if args.wpm:
+        unit_ms = 1200.0 / args.wpm
+
+    decoder_cfg = DecoderConfig(
+        unit_ms=unit_ms,
+        dash_units=pick("dash_units", "dash_units"),
+        letter_gap_units=pick("letter_gap", "letter_gap_units"),
+        word_gap_units=pick("word_gap", "word_gap_units"),
+        min_rms_threshold=cfg_dict["min_rms_threshold"]
+        if "min_rms_threshold" in cfg_dict
+        else DecoderConfig.min_rms_threshold,
+        calibration_seconds=cfg_dict.get("calibration_seconds", DecoderConfig.calibration_seconds),
+        target_freq=pick("freq", "freq"),
+    )
+
+    resolved = {
+        "output_dir": cfg_dict["output_dir"],
+        "debug": bool(args.debug or cfg_dict["debug"]),
+        "rate": pick("rate", "rate"),
+        "blocksize": int(pick("blocksize", "blocksize")),
+        "threshold": cfg_dict["threshold"] if args.threshold is None else args.threshold,
+        "word_sep": pick("word_sep", "word_sep") or " ",
+        "target_rate": cfg_dict["target_rate"],
+    }
+
+    os.makedirs(resolved["output_dir"], exist_ok=True)
+    return decoder_cfg, resolved
+
 def build_parser():
     """Construit le parser CLI."""
     p = argparse.ArgumentParser(
         description="Decode le Morse a partir du son (loopback ou micro)."
     )
-    p.add_argument("--unit", type=float, default=60.0, help="Duree d un point (ms)")
+    p.add_argument("--config", type=str, help="Chemin vers un fichier YAML de configuration")
+    p.add_argument("--unit", type=float, help="Duree d un point (ms)")
     p.add_argument(
         "--wpm",
         type=float,
         help="Vitesse en mots par minute (PARIS). Si definie, unit = 1200 / wpm.",
     )
-    p.add_argument("--rate", type=int, default=44100, help="Frequence d echantillonnage")
+    p.add_argument("--rate", type=int, help="Frequence d echantillonnage")
     p.add_argument(
-        "--blocksize", type=int, default=1024, help="Taille de bloc en echantillons"
+        "--blocksize", type=int, help="Taille de bloc en echantillons"
     )
     p.add_argument(
         "--dash-units",
         type=float,
-        default=2.0,
         help="Seuil (en unites) pour distinguer tiret de point (defaut 2.0).",
     )
     p.add_argument(
         "--letter-gap",
         type=float,
-        default=9.0,
         help="Seuil (en unites) de fin de lettre.",
     )
     p.add_argument(
         "--word-gap",
         type=float,
-        default=20.0,
         help="Seuil (en unites) de fin de mot.",
     )
     p.add_argument(
         "--word-sep",
         type=str,
-        default=" ",
         help="Caractere a afficher entre les mots (defaut: espace). Ex: '/'",
     )
     p.add_argument(
         "--freq",
         type=float,
-        default=600.0,
         help="Frequence cible du bip (Goertzel).",
     )
     p.add_argument("--device", type=str, help="Nom ou index du peripherique audio")
@@ -624,29 +768,28 @@ def main():
         list_devices()
         return
 
-    unit_ms = args.unit
-    if args.wpm:
-        unit_ms = 1200.0 / args.wpm  # PARIS timing
-
-    cfg = DecoderConfig(
-        unit_ms=unit_ms,
-        dash_units=args.dash_units,
-        letter_gap_units=args.letter_gap,
-        word_gap_units=args.word_gap,
-        target_freq=args.freq,
-    )
+    decoder_cfg, resolved = merge_config_with_args(args)
+    args.rate = resolved["rate"]
+    args.blocksize = resolved["blocksize"]
+    args.threshold = resolved["threshold"]
+    args.word_sep = resolved["word_sep"]
+    args.debug = resolved["debug"]
+    args.target_rate = resolved["target_rate"]
     transcript: List[str] = []
 
     def emit(char: str):
         transcript.append(char)
         print(char, end="", flush=True)
 
-    decoder = MorseDecoder(cfg, emit, debug=args.debug, space_char=args.word_sep)
+    decoder = MorseDecoder(decoder_cfg, emit, debug=args.debug, space_char=args.word_sep)
 
     if args.file:
         decode_file(args, decoder)
     else:
-        capture_stream(args, decoder)
+        record_path = None
+        if args.debug and resolved["output_dir"]:
+            record_path = os.path.join(resolved["output_dir"], "debug_capture.wav")
+        capture_stream(args, decoder, record_path=record_path)
 
     print("\n\nTexte decode:\n" + "".join(transcript))
 
