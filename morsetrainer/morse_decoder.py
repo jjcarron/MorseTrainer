@@ -5,6 +5,8 @@ import sys
 import wave
 import shutil
 import os
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
@@ -86,8 +88,8 @@ class DecoderConfig:
 
     unit_ms: float = 60.0  # base Morse unit (dot length), ~20 WPM
     dash_units: float = 2.0  # threshold (in units) to decide dash vs dot
-    letter_gap_units: float = 4.5  # >= means end of letter
-    word_gap_units: float = 12.0  # >= means space
+    letter_gap_units: float = 9.0  # >= means end of letter
+    word_gap_units: float = 20.0  # >= means space
     min_rms_threshold: float = 0.02  # floor to avoid zero threshold
     on_hysteresis: float = 1.2  # multiplier for noise floor
     calibration_seconds: float = 2.0
@@ -247,10 +249,44 @@ def read_audio_file(path: str, blocksize: int):
         yield from read_wave_file(path, blocksize)
         return
 
+    target_rate = 44100
+
     if AudioSegment is None:
-        raise ValueError(
-            f"Format {ext} non supporte sans pydub. Installez 'pydub' + ffmpeg ou convertissez en WAV (ex: ffmpeg -i input{ext} output.wav)."
-        )
+        # Fallback: tenter une conversion rapide via ffmpeg si disponible.
+        if not shutil.which("ffmpeg"):
+            raise ValueError(
+                f"Format {ext} non supporte sans pydub ni ffmpeg. "
+                f"Installez 'pydub' + ffmpeg ou convertissez en WAV (ex: ffmpeg -i input{ext} output.wav)."
+            )
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            result = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    path,
+                    "-vn",
+                    "-acodec",
+                    "pcm_s16le",
+                    "-ar",
+                    str(target_rate),
+                    tmp_path,
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            if result.returncode != 0:
+                raise ValueError(f"ffmpeg n'a pas pu convertir {path}")
+            yield from read_wave_file(tmp_path, blocksize)
+        finally:
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        return
 
     ffmpeg_bin = AudioSegment.converter or shutil.which("ffmpeg")
     if not ffmpeg_bin:
@@ -259,7 +295,7 @@ def read_audio_file(path: str, blocksize: int):
         )
 
     segment = AudioSegment.from_file(path)
-    segment = segment.set_channels(1)
+    segment = segment.set_channels(1).set_frame_rate(target_rate)
     sample_rate = segment.frame_rate
     samples = np.array(segment.get_array_of_samples()).astype(np.float32)
 
@@ -515,7 +551,7 @@ def build_parser():
     )
     p.add_argument("--rate", type=int, default=44100, help="Frequence d echantillonnage")
     p.add_argument(
-        "--blocksize", type=int, default=2048, help="Taille de bloc en echantillons"
+        "--blocksize", type=int, default=1024, help="Taille de bloc en echantillons"
     )
     p.add_argument(
         "--dash-units",
@@ -526,13 +562,13 @@ def build_parser():
     p.add_argument(
         "--letter-gap",
         type=float,
-        default=4.5,
+        default=9.0,
         help="Seuil (en unites) de fin de lettre.",
     )
     p.add_argument(
         "--word-gap",
         type=float,
-        default=12.0,
+        default=20.0,
         help="Seuil (en unites) de fin de mot.",
     )
     p.add_argument(
@@ -559,8 +595,7 @@ def build_parser():
     p.add_argument(
         "--threshold",
         type=float,
-        default=0.02,
-        help="Seuil RMS manuel (0-1). Sinon calcule automatiquement (live uniquement).",
+        help="Seuil RMS manuel (0-1). Sinon calcule automatiquement.",
     )
     p.add_argument(
         "--calibration",
