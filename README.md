@@ -22,3 +22,9 @@ Outils d'apprentissage et de décodage du Morse (méthode Koch).
 ## Config et tests
 - Configurer via `config/*.yaml` (voir commentaires). CLI > YAML > valeurs par défaut.
 - Tests : `pytest`
+
+### Détection (décodeur)
+- Mesure d'énergie Goertzel sur `freq` (600 Hz par défaut), sinon RMS global.
+- Seuil auto si `threshold` est null : percentile p20 (bruit), p95 (signal), interpolation avec bornes (`min_rms_threshold`).
+- Timing fixe basé sur `unit_ms` (60 ms par défaut) : ON < `dash_units` → point, ON >= `dash_units` → tiret ; OFF >= `letter_gap_units` → fin de lettre, OFF >= `word_gap_units` → espace.
+- Mp3 converti via ffmpeg et rééchantillonné à `target_rate` pour stabiliser pitch/timing.

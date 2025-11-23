@@ -51,6 +51,16 @@ python -m pip install pyttsx3 sounddevice pydub numpy PyYAML pytest
 - Éditez `config/morse_trainer.yaml` et `config/morse_decoder.yaml` (commentés).
 - Les options CLI priment sur le YAML, qui lui-même sur les valeurs par défaut.
 
+### 3a. Algorithme de détection (décodeur)
+- **Fréquence cible** : Goertzel sur la fréquence `freq` (par défaut 600 Hz) pour mesurer l'énergie d'un bloc audio ; si `freq` est `null`, on prend le RMS global.
+- **Seuil** : si `threshold` est `null`, on calcule un seuil auto sur tout le fichier (offline) ou sur quelques blocs de calibration (live) : percentile p20 du bruit et p95 du signal, puis un seuil interpolé et borné par `min_rms_threshold`.
+- **Timing** : cadencé par `unit_ms` (par défaut 60 ms ~20 WPM). On cumule la durée des états ON/OFF :
+  - ON < `dash_units` → point ; ON >= `dash_units` → tiret.
+  - OFF >= `letter_gap_units` → fin de lettre ; OFF >= `word_gap_units` → espace.
+  Les gaps inter-éléments plus courts ne ferment pas de lettre.
+- **Normalisation** : les fichiers mp3 sont convertis via ffmpeg et rééchantillonnés à `target_rate` (par défaut 44.1 kHz) pour stabiliser le pitch et les timings.
+- **Debug** : `--debug` affiche les transitions `[TONE]/[GAP]` (durées en ms et unités) et enregistre `debug_capture.wav` dans `output_dir`.
+
 ## 4. Exécution
 - Entraîneur Koch :
   `python -m morsetrainer.morse_trainer`
