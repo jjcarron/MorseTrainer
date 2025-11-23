@@ -1,5 +1,5 @@
 """Décodage Morse à partir d'un flux audio live ou d'un fichier."""
-# pylint: disable=duplicate-code,broad-exception-caught
+# pylint: disable=duplicate-code,broad-exception-caught,too-many-instance-attributes
 
 import argparse
 import os
@@ -414,7 +414,7 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
     extra_settings = None
     if args.loopback:
         try:
-            extra_settings = sd.WasapiSettings(loopback=True)
+            extra_settings = sd.WasapiSettings(loopback=True)  # pylint: disable=unexpected-keyword-arg
         except Exception:
             extra_settings = None
 
