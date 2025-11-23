@@ -5,13 +5,13 @@ debug: false                # Active le mode debug (traces et enregistrement deb
 # Paramètres temporisation / timing
 unit_ms: 60                 # Durée d'un point en ms (~20 WPM)
 dash_units: 2.0             # Seuil (en unités) pour distinguer tiret de point
-letter_gap_units: 9.0       # Seuil (en unités) de fin de lettre
-word_gap_units: 20.0        # Seuil (en unités) de fin de mot
+letter_gap_units: 4.5       # Seuil (en unités) de fin de lettre
+word_gap_units: 12.0        # Seuil (en unités) de fin de mot
 
 # Paramètres audio / Goertzel
 freq: 600                   # Fréquence cible du bip (Hz)
-rate: 44100                 # Fréquence d'échantillonnage demandée
+rate: 48000                 # Fréquence d'échantillonnage demandée
 blocksize: 1024             # Taille de bloc audio traitée à chaque itération
-target_rate: 44100          # Fréquence cible lors de la conversion ffmpeg
-threshold: null             # Seuil RMS manuel; null pour auto
+target_rate: 48000          # Fréquence cible lors de la conversion ffmpeg
+threshold: 0.02             # Seuil RMS manuel; null pour auto
 word_sep: " "               # Caractère séparateur de mots dans la sortie
