@@ -1,4 +1,5 @@
 """Décodage Morse à partir d'un flux audio live ou d'un fichier."""
+# pylint: disable=duplicate-code,broad-exception-caught
 
 import argparse
 import os
@@ -86,53 +87,6 @@ MORSE = {
 
 MORSE_REVERSE = {v: k for k, v in MORSE.items()}
 
-def load_yaml_config(paths: List[str]) -> Dict[str, Any]:
-    """Charge le premier fichier YAML existant parmi les chemins listés."""
-    if yaml is None:
-        return {}
-    for path in paths:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as cfg_file:
-                data = yaml.safe_load(cfg_file) or {}
-                if isinstance(data, dict):
-                    return data
-    return {}
-
-
-def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
-    """Valide et nettoie la configuration issue du YAML."""
-    cfg = dict(raw or {})
-    def positive(name: str, default: Union[int, float]) -> Union[int, float]:
-        val = cfg.get(name, default)
-        if val is None:
-            return default
-        if not isinstance(val, (int, float)) or val <= 0:
-            raise ValueError(f"{name} doit etre un nombre positif")
-        return val
-
-    validated = {
-        "output_dir": cfg.get("output_dir", DEFAULT_OUTPUT_DIR),
-        "debug": bool(cfg.get("debug", False)),
-        "unit_ms": positive("unit_ms", 60.0),
-        "dash_units": positive("dash_units", 2.0),
-        "letter_gap_units": positive("letter_gap_units", 9.0),
-        "word_gap_units": positive("word_gap_units", 20.0),
-        "freq": positive("freq", 600.0),
-        "rate": positive("rate", DEFAULT_TARGET_RATE),
-        "blocksize": int(positive("blocksize", 1024)),
-        "threshold": cfg.get("threshold"),
-        "word_sep": cfg.get("word_sep", " "),
-        "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
-        "min_rms_threshold": positive("min_rms_threshold", 0.02),
-        "calibration_seconds": positive("calibration_seconds", 2.0),
-    }
-    thr = validated["threshold"]
-    if thr is not None:
-        if not isinstance(thr, (int, float)) or thr <= 0:
-            raise ValueError("threshold doit etre > 0 ou None")
-        validated["threshold"] = float(thr)
-    return validated
-
 DEFAULT_CONFIG_PATHS = [
     os.path.join("config", "morse_decoder.yaml"),
     "morse_decoder.yaml",
@@ -202,7 +156,7 @@ class DecoderConfig:
     target_freq: Optional[float] = None  # if set, use Goertzel band energy
 
 
-class MorseDecoder:
+class MorseDecoder:  # pylint: disable=too-many-instance-attributes
     """Machine à états pour transformer un flux audio en texte Morse."""
 
     def __init__(
@@ -360,7 +314,8 @@ def read_audio_file(path: str, blocksize: int, target_rate: int = DEFAULT_TARGET
         if not shutil.which("ffmpeg"):
             raise ValueError(
                 f"Format {ext} non supporte sans pydub ni ffmpeg. "
-                f"Installez 'pydub' + ffmpeg ou convertissez en WAV (ex: ffmpeg -i input{ext} output.wav)."
+                f"Installez 'pydub' + ffmpeg ou convertissez en WAV "
+                f"(ex: ffmpeg -i input{ext} output.wav)."
             )
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
             tmp_path = tmp.name
@@ -395,7 +350,8 @@ def read_audio_file(path: str, blocksize: int, target_rate: int = DEFAULT_TARGET
     ffmpeg_bin = AudioSegment.converter or shutil.which("ffmpeg")
     if not ffmpeg_bin:
         raise ValueError(
-            "ffmpeg introuvable. Installez ffmpeg et ajoutez-le au PATH (ou definissez FFMPEG_BINARY=<chemin/vers/ffmpeg.exe>)"
+            "ffmpeg introuvable. Installez ffmpeg et ajoutez-le au PATH "
+            "(ou definissez FFMPEG_BINARY=<chemin/vers/ffmpeg.exe>)"
         )
 
     segment = AudioSegment.from_file(path)
@@ -440,7 +396,9 @@ def measure_level(block: np.ndarray, sample_rate: int, target_freq: Optional[flo
     return float(magnitude)
 
 
-def capture_stream(args, decoder: MorseDecoder, record_path: Optional[str] = None):
+def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+    args, decoder: MorseDecoder, record_path: Optional[str] = None
+):
     """Capture live audio via sounddevice et envoie les blocs au décodeur."""
     if sd is None:
         print("sounddevice non installe. Installez-le avec: pip install sounddevice")

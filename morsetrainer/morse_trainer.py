@@ -1,4 +1,5 @@
 """Entraîneur Morse (méthode Koch) avec synthèse vocale et bip audio."""
+# pylint: disable=duplicate-code
 
 import argparse
 import os
@@ -39,7 +40,8 @@ def _warn_no_audio():
     # Print the warning only once to avoid noise during training loops.
     if not hasattr(_warn_no_audio, "shown"):
         print(
-            "⚠️  Aucun backend audio trouvé (winsound/play/beep/powershell). Les sons sont remplacés par des pauses."
+            "⚠️  Aucun backend audio trouvé (winsound/play/beep/powershell). "
+            "Les sons sont remplacés par des pauses."
         )
         _warn_no_audio.shown = True
 
@@ -214,13 +216,11 @@ KOCH_SEQUENCE = [
 LAST_FILE = "last_known_letter.txt"
 SESSIONS_FILE = "sessions_morse.txt"
 
-_speech_engine = None
-_speech_engine_failed = False
-_warned_tts_missing = False
+SPEECH_STATE = {"engine": None, "failed": False, "warned": False}
 
 
 @dataclass
-class TrainerConfig:
+class TrainerConfig:  # pylint: disable=too-many-instance-attributes
     """Configuration de l'entraîneur (audio, persistance, debug)."""
 
     output_dir: str = DEFAULT_OUTPUT_DIR
@@ -272,33 +272,30 @@ def validate_trainer_config(raw: Optional[Dict[str, Any]]) -> TrainerConfig:
 
 def speak(text):
     """TTS wrapper that degrades gracefully when no engine is available."""
-    global _speech_engine, _speech_engine_failed
-
-    if _speech_engine_failed:
+    if SPEECH_STATE["failed"]:
         return
 
     if not tts_available():
-        global _warned_tts_missing
-        if not _warned_tts_missing:
+        if not SPEECH_STATE["warned"]:
             print("⚠️  Synthèse vocale désactivée : backend TTS introuvable (espeak/espeak-ng).")
-            _warned_tts_missing = True
-        _speech_engine_failed = True
+            SPEECH_STATE["warned"] = True
+        SPEECH_STATE["failed"] = True
         return
 
-    if _speech_engine is None:
+    if SPEECH_STATE["engine"] is None:
         try:
-            _speech_engine = pyttsx3.init()
-        except Exception as exc:  # TTS not available (e.g., missing espeak)
+            SPEECH_STATE["engine"] = pyttsx3.init()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             print(f"⚠️  Synthèse vocale indisponible: {exc}")
-            _speech_engine_failed = True
+            SPEECH_STATE["failed"] = True
             return
 
     try:
-        _speech_engine.say(text)
-        _speech_engine.runAndWait()
-    except Exception as exc:
+        SPEECH_STATE["engine"].say(text)
+        SPEECH_STATE["engine"].runAndWait()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         print(f"⚠️  Erreur synthèse vocale: {exc}")
-        _speech_engine_failed = True
+        SPEECH_STATE["failed"] = True
 
 
 def play_morse(symbols):
@@ -376,7 +373,7 @@ def get_letters_apprises(last_known=None):
     return learned, next_letter
 
 
-def main():
+def main():  # pylint: disable=too-many-locals,too-many-statements
     """Point d'entrée CLI pour l'entraînement Morse méthode Koch."""
     parser = argparse.ArgumentParser(description="Entraînement Morse méthode Koch")
     parser.add_argument(
@@ -402,7 +399,7 @@ def main():
 
     # Appliquer la config et les overrides CLI
     os.makedirs(cfg.output_dir, exist_ok=True)
-    global FREQ, DOT, DASH, SPACE, LAST_FILE, SESSIONS_FILE
+    global FREQ, DOT, DASH, SPACE, LAST_FILE, SESSIONS_FILE  # pylint: disable=global-statement
     FREQ = cfg.freq
     DOT = cfg.dot_ms
     DASH = DOT * cfg.dash_factor
@@ -470,11 +467,10 @@ def main():
                 with open(LAST_FILE, "w", encoding="utf-8") as f:
                     f.write(letters[-1])
                 break
-            else:
-                print("❌ Entraîne-toi encore avant de passer à la suivante.")
-                retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
-                if retry != "O":
-                    break
+            print("❌ Entraîne-toi encore avant de passer à la suivante.")
+            retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
+            if retry != "O":
+                break
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 import argparse
 import wave
 import numpy as np
-import sounddevice as sd
+import sounddevice as sd  # pylint: disable=import-error
 
 
 def main():
@@ -11,11 +11,24 @@ def main():
     parser = argparse.ArgumentParser(
         description="Capture une entree audio et sauvegarde en WAV (debug)."
     )
-    parser.add_argument("--device", type=str, help="Nom ou index du peripherique input")
-    parser.add_argument("--rate", type=int, default=48000, help="Frequence d echantillonnage")
-    parser.add_argument("--blocksize", type=int, default=4096, help="Taille de bloc en echantillons")
-    parser.add_argument("--duration", type=float, default=5.0, help="Duree de capture en secondes")
-    parser.add_argument("--outfile", type=str, default="capture_test.wav", help="Fichier WAV de sortie")
+    parser.add_argument(
+        "--device", type=str, help="Nom ou index du peripherique input"
+    )
+    parser.add_argument(
+        "--rate", type=int, default=48000, help="Frequence d echantillonnage"
+    )
+    parser.add_argument(
+        "--blocksize", type=int, default=4096, help="Taille de bloc en echantillons"
+    )
+    parser.add_argument(
+        "--duration", type=float, default=5.0, help="Duree de capture en secondes"
+    )
+    parser.add_argument(
+        "--outfile",
+        type=str,
+        default="capture_test.wav",
+        help="Fichier WAV de sortie",
+    )
     args = parser.parse_args()
 
     # Normalize device id
@@ -32,7 +45,7 @@ def main():
         info = sd.query_devices(device, "input")
         in_ch = info.get("max_input_channels", 0) if isinstance(info, dict) else 0
         channels = 2 if in_ch >= 2 else 1
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         channels = 1
 
     print(f"Ouverture device={device} channels={channels} rate={args.rate}")
@@ -63,10 +76,10 @@ def main():
     audio_int16 = np.clip(audio * 32767, -32768, 32767).astype(np.int16)
 
     with wave.open(args.outfile, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(int(stream.samplerate))
-        wf.writeframes(audio_int16.tobytes())
+        wf.setnchannels(1)  # pylint: disable=no-member
+        wf.setsampwidth(2)  # pylint: disable=no-member
+        wf.setframerate(int(stream.samplerate))  # pylint: disable=no-member
+        wf.writeframes(audio_int16.tobytes())  # pylint: disable=no-member
 
     print(f"Capture terminee -> {args.outfile} (rate={int(stream.samplerate)})")
 

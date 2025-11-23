@@ -1,3 +1,4 @@
+"""Configuration Pytest pour ajouter le chemin racine du package."""
 import sys
 from pathlib import Path
 

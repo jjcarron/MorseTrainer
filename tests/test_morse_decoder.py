@@ -1,9 +1,11 @@
+"""Tests unitaires pour le décodeur Morse."""
 import numpy as np
 
 from morsetrainer.morse_decoder import DecoderConfig, MorseDecoder, measure_level
 
 
 def test_measure_level_detects_sine_wave():
+    """Goertzel doit renvoyer une énergie notable sur une sinusoïde à la bonne fréquence."""
     sample_rate = 96000
     freq = 600
     t = np.arange(sample_rate // 10)
@@ -13,6 +15,7 @@ def test_measure_level_detects_sine_wave():
 
 
 def test_decoder_parses_simple_k():
+    """Vérifie la séquence -.- (K) avec des durées connues."""
     cfg = DecoderConfig(unit_ms=60, dash_units=2, letter_gap_units=4.5, word_gap_units=12)
     output = []
     decoder = MorseDecoder(cfg, output.append)
@@ -24,7 +27,7 @@ def test_decoder_parses_simple_k():
         samples = int(sample_rate * (ms / 1000.0))
         decoder.process_block(np.full(samples, value, dtype=float), sample_rate)
 
-    # K = -.- with short gaps then letter gap
+    # K = -.- avec des gaps courts puis un gap de fin de lettre
     push(1.0, 180)
     push(0.0, 60)
     push(1.0, 60)
