@@ -539,9 +539,18 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         break
                 time.sleep(0.05)
         else:
-            # Pas de msvcrt : on ne bloque pas stdin, on attend juste la fin.
-            while not quit_event.is_set():
-                time.sleep(0.5)
+            # Fallback : attendre une saisie utilisateur (taper la touche + Entrée).
+            try:
+                while not quit_event.is_set():
+                    line = sys.stdin.readline()
+                    if not line:
+                        time.sleep(0.1)
+                        continue
+                    if line.strip().lower().startswith(quit_key.lower()):
+                        quit_event.set()
+                        break
+            except Exception:
+                pass
 
     watcher = threading.Thread(target=_watch_quit, daemon=True)
     watcher.start()
