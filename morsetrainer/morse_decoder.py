@@ -542,6 +542,10 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         ch = msvcrt.getwch()
                         if ch and ch.lower() == quit_key.lower():
                             quit_event.set()
+                            try:
+                                stream.abort()
+                            except Exception:
+                                pass
                             break
                     time.sleep(0.05)
             else:
@@ -554,6 +558,10 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                             continue
                         if line.strip().lower().startswith(quit_key.lower()):
                             quit_event.set()
+                            try:
+                                stream.abort()
+                            except Exception:
+                                pass
                             break
                 except Exception:
                     pass
@@ -598,7 +606,12 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
 
         try:
             while not quit_event.is_set():
-                data, _ = stream.read(blocksize)
+                try:
+                    data, _ = stream.read(blocksize)
+                except sd.PortAudioError as exc:
+                    if quit_event.is_set() and "Stream is stopped" in str(exc):
+                        break
+                    raise
                 if data.ndim > 1:
                     data_mono = data.mean(axis=1)
                 else:
