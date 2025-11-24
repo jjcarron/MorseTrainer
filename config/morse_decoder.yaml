@@ -14,5 +14,6 @@ rate: 48000                 # Fréquence d'échantillonnage demandée
 blocksize: 512              # Taille de bloc audio traitée à chaque itération (plus petit = latence réduite)
 target_rate: 48000          # Fréquence cible lors de la conversion ffmpeg
 threshold: 0.02             # Seuil RMS manuel; null pour auto
+device: 71                  # Périphérique d'entrée (id ou nom)
 word_sep: " "               # Caractère séparateur de mots dans la sortie
 quit_key: "q"               # Touche pour quitter proprement en live (si supportée)
