@@ -143,6 +143,7 @@ def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "word_sep": cfg.get("word_sep", " "),
         "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
         "quit_key": cfg.get("quit_key", DEFAULT_QUIT_KEY),
+        "device": cfg.get("device"),
     }
     thr = validated["threshold"]
     if thr is not None:
