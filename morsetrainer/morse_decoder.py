@@ -526,41 +526,48 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
             "Impossible d'ouvrir le flux audio. Verifiez le peripherique et les canaux."
         )
 
-    quit_event = threading.Event()
-    quit_key = getattr(args, "quit_key", None) or DEFAULT_QUIT_KEY
-
-    def _watch_quit():  # pragma: no cover - interaction utilisateur
-        if msvcrt:
-            while not quit_event.is_set():
-                if msvcrt.kbhit():
-                    ch = msvcrt.getwch()
-                    if ch and ch.lower() == quit_key.lower():
-                        quit_event.set()
-                        break
-                time.sleep(0.05)
-        else:
-            # Fallback : attendre une saisie utilisateur (taper la touche + Entrée).
-            try:
-                while not quit_event.is_set():
-                    line = sys.stdin.readline()
-                    if not line:
-                        time.sleep(0.1)
-                        continue
-                    if line.strip().lower().startswith(quit_key.lower()):
-                        quit_event.set()
-                        break
-            except Exception:
-                pass
-
-    watcher = threading.Thread(target=_watch_quit, daemon=True)
-    watcher.start()
-
     with stream:
         # Use the actual samplerate negotiated by PortAudio (can differ from requested)
         sample_rate = int(stream.samplerate)
         print(
             f"Capture ouverte sur device={device} channels={channels} rate={sample_rate}"
         )
+        quit_event = threading.Event()
+        quit_key = getattr(args, "quit_key", None) or DEFAULT_QUIT_KEY
+
+        def _watch_quit():  # pragma: no cover - interaction utilisateur
+            if msvcrt:
+                while not quit_event.is_set():
+                    if msvcrt.kbhit():
+                        ch = msvcrt.getwch()
+                        if ch and ch.lower() == quit_key.lower():
+                            quit_event.set()
+                            try:
+                                stream.abort()
+                            except Exception:
+                                pass
+                            break
+                    time.sleep(0.05)
+            else:
+                # Fallback : lire stdin (taper la touche + Entrée)
+                try:
+                    while not quit_event.is_set():
+                        line = sys.stdin.readline()
+                        if not line:
+                            time.sleep(0.1)
+                            continue
+                        if line.strip().lower().startswith(quit_key.lower()):
+                            quit_event.set()
+                            try:
+                                stream.abort()
+                            except Exception:
+                                pass
+                            break
+                except Exception:
+                    pass
+
+        watcher = threading.Thread(target=_watch_quit, daemon=True)
+        watcher.start()
         record_writer = None
         if decoder.debug:
             target_record = record_path or "debug_capture.wav"
@@ -598,7 +605,7 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
             print(f"Appuie sur '{quit_key}' pour quitter proprement (console active).")
 
         try:
-            while True:
+            while not quit_event.is_set():
                 data, _ = stream.read(blocksize)
                 if data.ndim > 1:
                     data_mono = data.mean(axis=1)
@@ -611,8 +618,6 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         .astype(np.int16)
                         .tobytes()
                     )
-                if quit_event.is_set():
-                    break
         except KeyboardInterrupt:
             print("\nArret demande par l utilisateur.")
         finally:
