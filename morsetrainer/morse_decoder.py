@@ -543,7 +543,7 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         if ch and ch.lower() == quit_key.lower():
                             quit_event.set()
                             try:
-                                stream.abort()
+                                stream.stop()
                             except Exception:
                                 pass
                             break
@@ -559,7 +559,7 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         if line.strip().lower().startswith(quit_key.lower()):
                             quit_event.set()
                             try:
-                                stream.abort()
+                                stream.stop()
                             except Exception:
                                 pass
                             break
@@ -585,18 +585,23 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
             * sample_rate
             / blocksize
         )
-        for _ in range(max(calibrate_blocks, 1)):
-            data, _ = stream.read(blocksize)
-            if data.ndim > 1:
-                data_mono = data.mean(axis=1)
-            else:
-                data_mono = data
-            level = measure_level(data_mono, sample_rate, decoder.cfg.target_freq)
-            noise_levels.append(level)
-            if record_writer is not None:
-                record_writer.writeframes(
-                    np.clip(data * 32767, -32768, 32767).astype(np.int16).tobytes()
-                )
+        try:
+            for _ in range(max(calibrate_blocks, 1)):
+                data, _ = stream.read(blocksize)
+                if data.ndim > 1:
+                    data_mono = data.mean(axis=1)
+                else:
+                    data_mono = data
+                level = measure_level(data_mono, sample_rate, decoder.cfg.target_freq)
+                noise_levels.append(level)
+                if record_writer is not None:
+                    record_writer.writeframes(
+                        np.clip(data * 32767, -32768, 32767).astype(np.int16).tobytes()
+                    )
+        except sd.PortAudioError as exc:
+            if "Stream is stopped" not in str(exc):
+                raise
+            quit_event.set()
 
         decoder.set_threshold(noise_levels, args.threshold)
         print(f"Seuil RMS: {decoder.rms_threshold:.4f}")
@@ -611,6 +616,7 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                 except sd.PortAudioError as exc:
                     # Si le flux est arreté (abort) à cause de la quit-key, sortir proprement.
                     if "Stream is stopped" in str(exc):
+                        quit_event.set()
                         break
                     raise
                 if data.ndim > 1:
