@@ -68,31 +68,6 @@ def main():
 
     quit_event = threading.Event()
 
-    def _watch_quit():  # pragma: no cover - interaction utilisateur
-        if msvcrt:
-            while not quit_event.is_set():
-                if msvcrt.kbhit():
-                    ch = msvcrt.getwch()
-                    if ch and ch.lower() == args.quit_key.lower():
-                        quit_event.set()
-                        break
-                time.sleep(0.05)
-        else:
-            try:
-                while not quit_event.is_set():
-                    line = sys.stdin.readline()
-                    if not line:
-                        time.sleep(0.1)
-                        continue
-                    if line.strip().lower().startswith(args.quit_key.lower()):
-                        quit_event.set()
-                        break
-            except Exception:
-                pass
-
-    watcher = threading.Thread(target=_watch_quit, daemon=True)
-    watcher.start()
-
     with sd.InputStream(
         samplerate=args.rate,
         blocksize=args.blocksize,
@@ -102,6 +77,39 @@ def main():
     ) as stream:
         print(f"Taux reel negotiation: {stream.samplerate}")
         print(f"Appuie sur '{args.quit_key}' (console) ou Ctrl+C pour arrêter la capture.")
+
+        def _watch_quit():  # pragma: no cover - interaction utilisateur
+            if msvcrt:
+                while not quit_event.is_set():
+                    if msvcrt.kbhit():
+                        ch = msvcrt.getwch()
+                        if ch and ch.lower() == args.quit_key.lower():
+                            quit_event.set()
+                            try:
+                                stream.stop()
+                            except Exception:
+                                pass
+                            break
+                    time.sleep(0.05)
+            else:
+                try:
+                    while not quit_event.is_set():
+                        line = sys.stdin.readline()
+                        if not line:
+                            time.sleep(0.1)
+                            continue
+                        if line.strip().lower().startswith(args.quit_key.lower()):
+                            quit_event.set()
+                            try:
+                                stream.stop()
+                            except Exception:
+                                pass
+                            break
+                except Exception:
+                    pass
+
+        watcher = threading.Thread(target=_watch_quit, daemon=True)
+        watcher.start()
         frames_captured = 0
         try:
             while frames_captured < frames_needed and not quit_event.is_set():
@@ -109,6 +117,7 @@ def main():
                     data, _ = stream.read(args.blocksize)
                 except sd.PortAudioError as exc:
                     if "Stream is stopped" in str(exc):
+                        quit_event.set()
                         break
                     raise
                 captured.append(data.copy())
@@ -117,6 +126,10 @@ def main():
             print("\nArrêt demandé (Ctrl+C).")
         finally:
             quit_event.set()
+            try:
+                stream.stop()
+            except Exception:
+                pass
 
     if not captured:
         print("Aucune donnée capturée.")
