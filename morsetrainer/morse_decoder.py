@@ -609,7 +609,8 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                 try:
                     data, _ = stream.read(blocksize)
                 except sd.PortAudioError as exc:
-                    if quit_event.is_set() and "Stream is stopped" in str(exc):
+                    # Si le flux est arreté (abort) à cause de la quit-key, sortir proprement.
+                    if "Stream is stopped" in str(exc):
                         break
                     raise
                 if data.ndim > 1:
