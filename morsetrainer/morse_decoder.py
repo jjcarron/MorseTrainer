@@ -8,12 +8,18 @@ import subprocess
 import sys
 import tempfile
 import wave
-from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import time
 import signal
 import threading
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+
+try:  # pragma: no cover - Windows only
+    import msvcrt
+except ImportError:  # pragma: no cover - non-Windows
+    msvcrt = None
 
 try:
     import sounddevice as sd
@@ -136,6 +142,7 @@ def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "threshold": cfg.get("threshold"),
         "word_sep": cfg.get("word_sep", " "),
         "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
+        "quit_key": cfg.get("quit_key", DEFAULT_QUIT_KEY),
     }
     thr = validated["threshold"]
     if thr is not None:
@@ -519,6 +526,26 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
             "Impossible d'ouvrir le flux audio. Verifiez le peripherique et les canaux."
         )
 
+    quit_event = threading.Event()
+    quit_key = getattr(args, "quit_key", None) or DEFAULT_QUIT_KEY
+
+    def _watch_quit():  # pragma: no cover - interaction utilisateur
+        if msvcrt:
+            while not quit_event.is_set():
+                if msvcrt.kbhit():
+                    ch = msvcrt.getwch()
+                    if ch and ch.lower() == quit_key.lower():
+                        quit_event.set()
+                        break
+                time.sleep(0.05)
+        else:
+            # Pas de msvcrt : on ne bloque pas stdin, on attend juste la fin.
+            while not quit_event.is_set():
+                time.sleep(0.5)
+
+    watcher = threading.Thread(target=_watch_quit, daemon=True)
+    watcher.start()
+
     with stream:
         # Use the actual samplerate negotiated by PortAudio (can differ from requested)
         sample_rate = int(stream.samplerate)
@@ -558,6 +585,8 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
         decoder.set_threshold(noise_levels, args.threshold)
         print(f"Seuil RMS: {decoder.rms_threshold:.4f}")
         print("Decodage en cours... Ctrl+C pour arreter.\n")
+        if quit_key:
+            print(f"Appuie sur '{quit_key}' pour quitter proprement (console active).")
 
         try:
             while True:
@@ -573,12 +602,15 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         .astype(np.int16)
                         .tobytes()
                     )
+                if quit_event.is_set():
+                    break
         except KeyboardInterrupt:
             print("\nArret demande par l utilisateur.")
         finally:
             decoder.finalize()
             if record_writer is not None:
                 record_writer.close()
+            quit_event.set()
 
 
 def decode_file(args, decoder: MorseDecoder):
@@ -659,7 +691,7 @@ def merge_config_with_args(args: argparse.Namespace) -> Tuple[DecoderConfig, Dic
         "threshold": cfg_dict["threshold"] if args.threshold is None else args.threshold,
         "word_sep": pick("word_sep", "word_sep") or " ",
         "target_rate": cfg_dict["target_rate"],
-        "quit_key": cfg_dict.get("quit_key", DEFAULT_QUIT_KEY),
+        "quit_key": args.quit_key or cfg_dict.get("quit_key", DEFAULT_QUIT_KEY),
     }
 
     os.makedirs(resolved["output_dir"], exist_ok=True)
@@ -671,6 +703,11 @@ def build_parser():
         description="Decode le Morse a partir du son (loopback ou micro)."
     )
     p.add_argument("--config", type=str, help="Chemin vers un fichier YAML de configuration")
+    p.add_argument(
+        "--quit-key",
+        type=str,
+        help="Touche clavier pour quitter proprement en live (ex: q).",
+    )
     p.add_argument("--unit", type=float, help="Duree d un point (ms)")
     p.add_argument(
         "--wpm",
