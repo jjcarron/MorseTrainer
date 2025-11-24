@@ -723,6 +723,7 @@ def merge_config_with_args(args: argparse.Namespace) -> Tuple[DecoderConfig, Dic
         "word_sep": pick("word_sep", "word_sep") or " ",
         "target_rate": cfg_dict["target_rate"],
         "quit_key": args.quit_key or cfg_dict.get("quit_key", DEFAULT_QUIT_KEY),
+        "device": pick("device", "device") or cfg_dict.get("device"),
     }
 
     os.makedirs(resolved["output_dir"], exist_ok=True)
@@ -824,6 +825,7 @@ def main():
     args.word_sep = resolved["word_sep"]
     args.debug = resolved["debug"]
     args.target_rate = resolved["target_rate"]
+    args.device = resolved["device"]
     transcript: List[str] = []
 
     def emit(char: str):
