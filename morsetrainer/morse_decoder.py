@@ -542,10 +542,6 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                         ch = msvcrt.getwch()
                         if ch and ch.lower() == quit_key.lower():
                             quit_event.set()
-                            try:
-                                stream.abort()
-                            except Exception:
-                                pass
                             break
                     time.sleep(0.05)
             else:
@@ -558,10 +554,6 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
                             continue
                         if line.strip().lower().startswith(quit_key.lower()):
                             quit_event.set()
-                            try:
-                                stream.abort()
-                            except Exception:
-                                pass
                             break
                 except Exception:
                     pass
