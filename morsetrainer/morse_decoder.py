@@ -10,6 +10,7 @@ import tempfile
 import wave
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import signal
 
 import numpy as np
 
