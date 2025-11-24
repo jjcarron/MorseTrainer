@@ -535,6 +535,9 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
         quit_event = threading.Event()
         quit_key = getattr(args, "quit_key", None) or DEFAULT_QUIT_KEY
 
+        if quit_key:
+            print(f"Appuie sur '{quit_key}' pour quitter proprement (console active).")
+
         def _watch_quit():  # pragma: no cover - interaction utilisateur
             if msvcrt:
                 while not quit_event.is_set():
@@ -606,8 +609,6 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
         decoder.set_threshold(noise_levels, args.threshold)
         print(f"Seuil RMS: {decoder.rms_threshold:.4f}")
         print("Decodage en cours... Ctrl+C pour arreter.\n")
-        if quit_key:
-            print(f"Appuie sur '{quit_key}' pour quitter proprement (console active).")
 
         try:
             while not quit_event.is_set():
