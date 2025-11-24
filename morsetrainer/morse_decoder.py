@@ -11,6 +11,7 @@ import wave
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import signal
+import threading
 
 import numpy as np
 
@@ -94,6 +95,7 @@ DEFAULT_CONFIG_PATHS = [
 ]
 DEFAULT_OUTPUT_DIR = "data"
 DEFAULT_TARGET_RATE = 44100
+DEFAULT_QUIT_KEY = "q"
 
 
 def load_yaml_config(paths: List[str]) -> Dict[str, Any]:
@@ -657,6 +659,7 @@ def merge_config_with_args(args: argparse.Namespace) -> Tuple[DecoderConfig, Dic
         "threshold": cfg_dict["threshold"] if args.threshold is None else args.threshold,
         "word_sep": pick("word_sep", "word_sep") or " ",
         "target_rate": cfg_dict["target_rate"],
+        "quit_key": cfg_dict.get("quit_key", DEFAULT_QUIT_KEY),
     }
 
     os.makedirs(resolved["output_dir"], exist_ok=True)

@@ -15,3 +15,4 @@ blocksize: 512              # Taille de bloc audio traitée à chaque itération
 target_rate: 48000          # Fréquence cible lors de la conversion ffmpeg
 threshold: 0.02             # Seuil RMS manuel; null pour auto
 word_sep: " "               # Caractère séparateur de mots dans la sortie
+quit_key: "q"               # Touche pour quitter proprement en live (si supportée)
