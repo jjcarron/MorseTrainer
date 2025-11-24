@@ -738,6 +738,8 @@ def main():
     """Point d'entrée CLI pour le décodage Morse."""
     parser = build_parser()
     args = parser.parse_args()
+    if hasattr(signal, "SIGQUIT"):
+        signal.signal(signal.SIGQUIT, lambda *_: sys.exit(0))
 
     if args.list_devices:
         list_devices()
