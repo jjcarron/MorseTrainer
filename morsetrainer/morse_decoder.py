@@ -627,10 +627,14 @@ def capture_stream(  # pylint: disable=too-many-locals,too-many-branches,too-man
         except KeyboardInterrupt:
             print("\nArret demande par l utilisateur.")
         finally:
+            quit_event.set()
+            try:
+                stream.stop()
+            except Exception:
+                pass
             decoder.finalize()
             if record_writer is not None:
                 record_writer.close()
-            quit_event.set()
 
 
 def decode_file(args, decoder: MorseDecoder):
