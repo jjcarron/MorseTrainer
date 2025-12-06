@@ -17,3 +17,4 @@ threshold: 0.02             # Seuil RMS manuel; null pour auto
 device: 71                  # Périphérique d'entrée (id ou nom)
 word_sep: " "               # Caractère séparateur de mots dans la sortie
 quit_key: "q"               # Touche pour quitter proprement en live (si supportée)
+live_morse: false           # true pour afficher . et - en temps réel (lettres à la fin des pauses)

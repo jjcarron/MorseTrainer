@@ -36,7 +36,10 @@ Chaque fichier YAML est commenté :
 - `rate`, `blocksize` : fréquence d'échantillonnage demandée, taille de bloc.
 - `target_rate` : fréquence cible pour la conversion ffmpeg.
 - `threshold` : seuil RMS manuel (`null` pour auto).
+- `device` : périphérique d'entrée (id ou nom).
 - `word_sep` : séparateur de mots en sortie.
+- `quit_key` : touche pour quitter proprement en live.
+- `live_morse` : `true` pour afficher `. -` en temps réel (lettres à la fin des pauses).
 
 ## 2. Installation
 ```bash

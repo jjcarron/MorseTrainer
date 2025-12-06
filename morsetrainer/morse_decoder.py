@@ -144,6 +144,7 @@ def validate_decoder_config(raw: Dict[str, Any]) -> Dict[str, Any]:
         "target_rate": positive("target_rate", DEFAULT_TARGET_RATE),
         "quit_key": cfg.get("quit_key", DEFAULT_QUIT_KEY),
         "device": cfg.get("device"),
+        "live_morse": bool(cfg.get("live_morse", False)),
     }
     thr = validated["threshold"]
     if thr is not None:
@@ -176,6 +177,9 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         output: Callable[[str], None],
         debug: bool = False,
         space_char: str = " ",
+        morse_output: Optional[Callable[[str], None]] = None,
+        letter_output: Optional[Callable[[str], None]] = None,
+        group_letters: bool = False,
     ):
         self.cfg = cfg
         self.output = output
@@ -188,6 +192,12 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         self.max_debug_events = 400
         self.space_char = space_char
         self.gap_state: Optional[str] = None  # None, "letter", "word"
+        self.morse_output = morse_output
+        self.letter_output = letter_output
+        self.group_letters = group_letters
+        self._pending_letters: List[str] = []
+        self._emitted_any_morse = False
+        self._emitted_any_letters = False
 
     def set_threshold(self, noise_levels: List[float], user_threshold: Optional[float]):
         """Calcule ou applique le seuil de détection."""
@@ -229,12 +239,16 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
                 if units >= self.cfg.word_gap_units and self.gap_state != "word":
                     self._flush_symbol()
                     self.output(self.space_char)
+                    if self.morse_output:
+                        self.morse_output("   ")
                     self.gap_state = "word"
                 elif (
                     units >= self.cfg.letter_gap_units
                     and self.gap_state not in ("letter", "word")
                 ):
                     self._flush_symbol()
+                    if self.morse_output:
+                        self.morse_output(" ")
                     self.gap_state = "letter"
             return
 
@@ -259,6 +273,13 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
             self.state_time = 0.0
         if self.gap_state is None:
             self._handle_gap(self.state_time * 1000.0, final=True)
+        if self.letter_output and self.group_letters and self._pending_letters:
+            # Fin de flux : on pousse le dernier mot sans ajouter d'espace final.
+            if not self._emitted_any_letters:
+                self.letter_output("\n")
+            self.letter_output("".join(self._pending_letters))
+            self._pending_letters.clear()
+            self._emitted_any_letters = True
 
     def _handle_tone(self, duration_ms: float):
         """Ajoute un point ou un tiret selon la durée du ton."""
@@ -270,16 +291,38 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
                 file=sys.stderr,
             )
             self._debug_events += 1
+        if self.morse_output:
+            self.morse_output(symbol)
         self.current_pattern.append(symbol)
+        self._emitted_any_morse = True
 
     def _handle_gap(self, duration_ms: float, final: bool = False):
         """Gère une pause pour savoir si on termine un symbole ou un mot."""
         units = duration_ms / self.cfg.unit_ms
+        if (
+            units >= self.cfg.letter_gap_units
+            and not self.current_pattern
+            and not self._pending_letters
+            and not self._emitted_any_morse
+            and not self._emitted_any_letters
+            and not final
+        ):
+            return  # ignorer le silence initial
         if units >= self.cfg.word_gap_units:
             self._flush_symbol()
             self.output(self.space_char)
+            if self.morse_output:
+                self.morse_output("   ")
+            if self.letter_output and self.group_letters and self._pending_letters:
+                if not self._emitted_any_letters:
+                    self.letter_output("\n")
+                self.letter_output("".join(self._pending_letters) + self.space_char)
+                self._pending_letters.clear()
+                self._emitted_any_letters = True
         elif units >= self.cfg.letter_gap_units:
             self._flush_symbol()
+            if self.morse_output:
+                self.morse_output(" ")
         elif final:
             self._flush_symbol()
         if self.debug and self._debug_events < 200:
@@ -293,6 +336,12 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         code = "".join(self.current_pattern)
         char = MORSE_REVERSE.get(code, "?")
         self.output(char)
+        if self.letter_output:
+            if self.group_letters:
+                self._pending_letters.append(char)
+            else:
+                self.letter_output(char)
+                self._emitted_any_letters = True
         self.current_pattern.clear()
 
 
@@ -725,6 +774,7 @@ def merge_config_with_args(args: argparse.Namespace) -> Tuple[DecoderConfig, Dic
         "target_rate": cfg_dict["target_rate"],
         "quit_key": args.quit_key or cfg_dict.get("quit_key", DEFAULT_QUIT_KEY),
         "device": pick("device", "device") or cfg_dict.get("device"),
+        "live_morse": pick("live_morse", "live_morse"),
     }
 
     os.makedirs(resolved["output_dir"], exist_ok=True)
@@ -805,6 +855,16 @@ def build_parser():
         action="store_true",
         help="Affiche les evenements de transitions (premiers 200) pour tuning.",
     )
+    try:
+        boolean_action = argparse.BooleanOptionalAction
+    except AttributeError:  # pragma: no cover - Python <3.9 safeguard
+        boolean_action = None
+    p.add_argument(
+        "--live-morse",
+        action=boolean_action or "store_true",
+        default=None,
+        help="Affiche les points/tirets en temps reel et les lettres a la fin du groupe.",
+    )
     return p
 
 
@@ -827,13 +887,42 @@ def main():
     args.debug = resolved["debug"]
     args.target_rate = resolved["target_rate"]
     args.device = resolved["device"]
+    args.live_morse = resolved["live_morse"]
     transcript: List[str] = []
+    live_word: List[str] = []
+    live_started = False
 
     def emit(char: str):
         transcript.append(char)
-        print(char, end="", flush=True)
+        if args.live_morse:
+            nonlocal live_started
+            if char == args.word_sep:
+                if live_word:
+                    word = "".join(live_word)
+                    if not live_started:
+                        live_started = True
+                    print(f"{word} ", end="", flush=True)
+                    live_started = True
+                    live_word.clear()
+            else:
+                live_word.append(char)
+        else:
+            print(char, end="", flush=True)
 
-    decoder = MorseDecoder(decoder_cfg, emit, debug=args.debug, space_char=args.word_sep)
+    live_emit = None
+    if args.live_morse:
+        def live_emit(symbol: str):
+            print(symbol, end="", flush=True)
+
+    decoder = MorseDecoder(
+        decoder_cfg,
+        emit,
+        debug=args.debug,
+        space_char=args.word_sep,
+        morse_output=live_emit,
+        letter_output=None,
+        group_letters=False,
+    )
 
     if args.file:
         decode_file(args, decoder)
@@ -843,6 +932,9 @@ def main():
             record_path = os.path.join(resolved["output_dir"], "debug_capture.wav")
         capture_stream(args, decoder, record_path=record_path)
 
+    if args.live_morse and live_word:
+        prefix = "\n" if not live_started else ""
+        print(f"{prefix}{''.join(live_word)}", end="", flush=True)
     print("\n\nTexte decode:\n" + "".join(transcript))
 
 
