@@ -1,6 +1,8 @@
 """Outil de capture audio simple pour générer un fichier WAV debug."""
+# pylint: disable=too-many-locals,too-many-statements,broad-exception-caught
 
 import argparse
+import sys
 import threading
 import time
 import wave

@@ -180,7 +180,7 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         morse_output: Optional[Callable[[str], None]] = None,
         letter_output: Optional[Callable[[str], None]] = None,
         group_letters: bool = False,
-    ):
+    ):  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self.cfg = cfg
         self.output = output
         self.current_state = False  # False = silence, True = tone
@@ -296,9 +296,10 @@ class MorseDecoder:  # pylint: disable=too-many-instance-attributes
         self.current_pattern.append(symbol)
         self._emitted_any_morse = True
 
-    def _handle_gap(self, duration_ms: float, final: bool = False):
+    def _handle_gap(self, duration_ms: float, final: bool = False):  # pylint: disable=too-many-boolean-expressions
         """Gère une pause pour savoir si on termine un symbole ou un mot."""
         units = duration_ms / self.cfg.unit_ms
+        # pylint: disable=too-many-boolean-expressions
         if (
             units >= self.cfg.letter_gap_units
             and not self.current_pattern
@@ -911,8 +912,9 @@ def main():
 
     live_emit = None
     if args.live_morse:
-        def live_emit(symbol: str):
+        def _live_emit(symbol: str):
             print(symbol, end="", flush=True)
+        live_emit = _live_emit
 
     decoder = MorseDecoder(
         decoder_cfg,
