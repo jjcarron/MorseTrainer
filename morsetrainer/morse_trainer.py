@@ -57,6 +57,11 @@ def is_wsl():
         return False
 
 
+def is_quit(value: str, quit_key: str = "Q") -> bool:
+    """Retourne True si la valeur saisie demande un arrêt propre."""
+    return value.strip().upper() == quit_key.upper()
+
+
 def tts_available():
     """Retourne True si une voix TTS est disponible sur la plateforme."""
     if sys.platform.startswith("win"):
@@ -445,6 +450,9 @@ def main():  # pylint: disable=too-many-locals,too-many-statements
             user_input = (
                 input("Tape la séquence entendue (ex: KMKM...): ").strip().upper()
             )
+            if is_quit(user_input):
+                print("Arrêt demandé. Au revoir.")
+                return
             user_seq = list(user_input)
 
             correct = sum(
@@ -469,6 +477,9 @@ def main():  # pylint: disable=too-many-locals,too-many-statements
                 break
             print("❌ Entraîne-toi encore avant de passer à la suivante.")
             retry = input("Veux-tu refaire ce test ? (O/N): ").strip().upper()
+            if is_quit(retry):
+                print("Arrêt demandé. Au revoir.")
+                return
             if retry != "O":
                 break
 
